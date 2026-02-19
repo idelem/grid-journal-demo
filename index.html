@@ -23,7 +23,11 @@
       </nav>
     </div>
     <div id="topbar-right">
-      <button id="add-column-btn" title="Add a global topic column">+ Add Topic</button>
+      <div id="search-wrap">
+        <span id="search-icon">⌕</span>
+        <input id="search-input" type="text" placeholder="#column  keyword|alt" autocomplete="off" spellcheck="false" />
+        <button id="search-clear" title="Clear search" aria-label="Clear">✕</button>
+      </div>
     </div>
   </header>
 
@@ -34,7 +38,9 @@
     <div id="column-headers">
       <div id="date-header-cell" class="header-cell date-col">Date</div>
       <!-- Topic header cells injected here -->
-      <div id="header-spacer"></div>
+      <div id="header-spacer">
+        <button id="add-column-btn" title="Add a global topic column">+</button>
+      </div>
     </div>
 
     <!-- Day rows -->

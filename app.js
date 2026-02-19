@@ -558,6 +558,7 @@ function render() {
   buildHeaders();
   buildRows();
   updateMonthLabel();
+  reapplyQuery();
 }
 
 function updateMonthLabel() {
@@ -593,9 +594,121 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeModal(null);
 });
 
-// ─── Add topic button ─────────────────────────────────────────────────────────
+// ─── Add topic button (now in header row) ────────────────────────────────────
 
 document.getElementById('add-column-btn').addEventListener('click', addGlobalTopic);
+
+// ─── Query parser ─────────────────────────────────────────────────────────────
+//
+// Syntax:  (#col with spaces) #colword keyword|alt keyword
+//
+// Returns: { colTerms: [string], rowTerms: [string] }
+//   colTerms — partial-match against topic/free-cell names (OR between terms
+//              means show all matched columns simultaneously)
+//   rowTerms — OR list; a row matches if any visible cell contains any term
+//              empty array = show all rows
+
+function parseQuery(raw) {
+  const colTerms = [];
+  let rest = raw.trim();
+
+  // Extract (#...) tokens first
+  rest = rest.replace(/\(#([^)]*)\)/g, (_, name) => {
+    const t = name.trim();
+    if (t) colTerms.push(t.toLowerCase());
+    return ' ';
+  });
+
+  // Extract #word tokens (terminated by space or end)
+  rest = rest.replace(/#(\S+)/g, (_, name) => {
+    colTerms.push(name.toLowerCase());
+    return ' ';
+  });
+
+  // Remainder is row filter
+  const rowRaw = rest.trim();
+  const rowTerms = rowRaw
+    ? rowRaw.split('|').map(t => t.trim().toLowerCase()).filter(Boolean)
+    : [];
+
+  return { colTerms, rowTerms };
+}
+
+// ─── Query filter ─────────────────────────────────────────────────────────────
+
+function applyQuery(raw) {
+  const searchWrap = document.getElementById('search-wrap');
+  const hasQuery = raw.trim().length > 0;
+  searchWrap.classList.toggle('has-query', hasQuery);
+  document.body.classList.toggle('query-active', hasQuery);
+
+  if (!hasQuery) {
+    // Reset everything
+    document.querySelectorAll('.col-hidden, .row-hidden').forEach(el => {
+      el.classList.remove('col-hidden', 'row-hidden');
+    });
+    return;
+  }
+
+  const { colTerms, rowTerms } = parseQuery(raw);
+  const hasColFilter = colTerms.length > 0;
+
+  // ── Column visibility ──
+  // Pinned topic headers + cells
+  document.querySelectorAll('.topic-header').forEach(hdr => {
+    const name = (hdr.querySelector('.header-label')?.textContent || '').toLowerCase();
+    const visible = !hasColFilter || colTerms.some(t => name.includes(t));
+    hdr.classList.toggle('col-hidden', !visible);
+    const id = hdr.dataset.topicId;
+    document.querySelectorAll(`.topic-cell[data-topic-id="${id}"]`).forEach(cell => {
+      cell.classList.toggle('col-hidden', !visible);
+    });
+  });
+
+  // Free cells — per cell per row
+  document.querySelectorAll('.free-cell').forEach(cell => {
+    const name = (cell.querySelector('.free-cell-name')?.textContent || '').toLowerCase();
+    const visible = !hasColFilter || colTerms.some(t => name.includes(t));
+    cell.classList.toggle('col-hidden', !visible);
+  });
+
+  // ── Row visibility ──
+  if (rowTerms.length === 0) {
+    document.querySelectorAll('.day-row').forEach(row => row.classList.remove('row-hidden'));
+    return;
+  }
+
+  document.querySelectorAll('.day-row').forEach(row => {
+    // Collect text from all visible cells in this row
+    const visibleCells = [
+      ...row.querySelectorAll('.topic-cell:not(.col-hidden) .cell-preview'),
+      ...row.querySelectorAll('.free-cell:not(.col-hidden) .cell-preview'),
+    ];
+    const texts = visibleCells.map(el => el.textContent.toLowerCase());
+    const allText = texts.join(' ');
+    const matches = rowTerms.some(term => allText.includes(term));
+    row.classList.toggle('row-hidden', !matches);
+  });
+}
+
+// ─── Search input wiring ──────────────────────────────────────────────────────
+
+document.getElementById('search-input').addEventListener('input', e => {
+  applyQuery(e.target.value);
+});
+
+document.getElementById('search-clear').addEventListener('click', () => {
+  const input = document.getElementById('search-input');
+  input.value = '';
+  applyQuery('');
+  input.focus();
+});
+
+// Re-apply current query after render (month nav, etc.)
+function reapplyQuery() {
+  const val = document.getElementById('search-input').value;
+  if (val.trim()) applyQuery(val);
+}
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
