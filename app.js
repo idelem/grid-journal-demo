@@ -286,60 +286,71 @@ function makePinnedCell(dk, topic, text) {
   cell.dataset.dateKey = dk;
   if (expandedColumns.has(topic.id)) cell.classList.add('col-expanded');
 
+  // Preview: rendered markdown
   const preview = document.createElement('div');
-  preview.className = `cell-preview ${text ? 'has-content' : 'empty-hint'}`;
-  preview.textContent = text || '…';
+  preview.className = text ? 'cell-preview' : 'cell-preview empty-hint';
+  if (text) preview.innerHTML = renderMd(text);
+  else preview.textContent = '…';
 
+  // Editor: seamless textarea, no buttons
   const editorWrap = document.createElement('div');
   editorWrap.className = 'cell-editor-wrap';
   const textarea = document.createElement('textarea');
   textarea.className = 'cell-textarea';
   textarea.value = text;
   textarea.placeholder = `Notes for ${topic.name}…`;
-
-  const actions = document.createElement('div');
-  actions.className = 'cell-actions';
-  const cancelBtn = document.createElement('button');
-  cancelBtn.className = 'cell-btn';
-  cancelBtn.textContent = 'Cancel';
-  const saveBtn = document.createElement('button');
-  saveBtn.className = 'cell-btn save-btn';
-  saveBtn.textContent = 'Save';
-
-  actions.appendChild(cancelBtn);
-  actions.appendChild(saveBtn);
   editorWrap.appendChild(textarea);
-  editorWrap.appendChild(actions);
+
   cell.appendChild(preview);
   cell.appendChild(editorWrap);
 
-  function openCell() {
+  function openCell(e) {
+    if (cell.classList.contains('active')) return;
     closeActiveCell();
     cell.classList.add('active');
     activeCell = { el: cell };
     textarea.focus();
+    // place cursor at click position if possible
+    if (e) {
+      try {
+        const range = document.caretRangeFromPoint
+          ? document.caretRangeFromPoint(e.clientX, e.clientY) : null;
+        if (range) {
+          const pos = range.startOffset;
+          textarea.setSelectionRange(pos, pos);
+        }
+      } catch(_) {}
+    }
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
   }
-  function closeCell(save) {
-    if (save) {
-      const val = textarea.value;
-      getEntry(dk).pinned[topic.id] = val;
-      saveData();
-      preview.textContent = val || '…';
-      preview.className = `cell-preview ${val ? 'has-content' : 'empty-hint'}`;
+
+  function saveCell() {
+    const val = textarea.value;
+    getEntry(dk).pinned[topic.id] = val;
+    saveData();
+    if (val) {
+      preview.innerHTML = renderMd(val);
+      preview.className = 'cell-preview';
     } else {
-      textarea.value = getEntry(dk).pinned[topic.id] || '';
+      preview.textContent = '…';
+      preview.className = 'cell-preview empty-hint';
     }
     cell.classList.remove('active');
     activeCell = null;
   }
 
-  preview.addEventListener('click', openCell);
-  cancelBtn.addEventListener('click', e => { e.stopPropagation(); closeCell(false); });
-  saveBtn.addEventListener('click', e => { e.stopPropagation(); closeCell(true); });
+  cell.addEventListener('click', openCell);
   textarea.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeCell(false);
-    if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); closeCell(true); }
+    if (e.key === 'Escape') {
+      // revert and close
+      textarea.value = getEntry(dk).pinned[topic.id] || '';
+      cell.classList.remove('active');
+      activeCell = null;
+    }
+    if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveCell(); }
   });
+  // expose saveCell so closeActiveCell can call it
+  cell._saveCell = saveCell;
 
   return cell;
 }
@@ -385,8 +396,9 @@ function makeFreeCell(dk, fc) {
 
   // preview / editor
   const preview = document.createElement('div');
-  preview.className = `cell-preview ${fc.text ? 'has-content' : 'empty-hint'}`;
-  preview.textContent = fc.text || '…';
+  preview.className = fc.text ? 'cell-preview' : 'cell-preview empty-hint';
+  if (fc.text) preview.innerHTML = renderMd(fc.text);
+  else preview.textContent = '…';
 
   const editorWrap = document.createElement('div');
   editorWrap.className = 'cell-editor-wrap';
@@ -394,19 +406,7 @@ function makeFreeCell(dk, fc) {
   textarea.className = 'cell-textarea';
   textarea.value = fc.text || '';
   textarea.placeholder = `Notes for ${fc.name}…`;
-
-  const cellActions = document.createElement('div');
-  cellActions.className = 'cell-actions';
-  const cancelBtn = document.createElement('button');
-  cancelBtn.className = 'cell-btn';
-  cancelBtn.textContent = 'Cancel';
-  const saveBtn = document.createElement('button');
-  saveBtn.className = 'cell-btn save-btn';
-  saveBtn.textContent = 'Save';
-  cellActions.appendChild(cancelBtn);
-  cellActions.appendChild(saveBtn);
   editorWrap.appendChild(textarea);
-  editorWrap.appendChild(cellActions);
 
   cell.appendChild(header);
   cell.appendChild(preview);
@@ -414,33 +414,40 @@ function makeFreeCell(dk, fc) {
 
   // open/close
   function openCell() {
+    if (cell.classList.contains('active')) return;
     closeActiveCell();
     cell.classList.add('active');
     activeCell = { el: cell };
     textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
   }
-  function closeCell(save) {
-    if (save) {
-      const entry = getEntry(dk);
-      const freeItem = (entry.free || []).find(f => f.id === fc.id);
-      if (freeItem) { freeItem.text = textarea.value; fc.text = freeItem.text; }
-      saveData();
-      preview.textContent = fc.text || '…';
-      preview.className = `cell-preview ${fc.text ? 'has-content' : 'empty-hint'}`;
+
+  function saveCell() {
+    const entry = getEntry(dk);
+    const freeItem = (entry.free || []).find(f => f.id === fc.id);
+    if (freeItem) { freeItem.text = textarea.value; fc.text = freeItem.text; }
+    saveData();
+    if (fc.text) {
+      preview.innerHTML = renderMd(fc.text);
+      preview.className = 'cell-preview';
     } else {
-      textarea.value = fc.text || '';
+      preview.textContent = '…';
+      preview.className = 'cell-preview empty-hint';
     }
     cell.classList.remove('active');
     activeCell = null;
   }
 
   preview.addEventListener('click', openCell);
-  cancelBtn.addEventListener('click', e => { e.stopPropagation(); closeCell(false); });
-  saveBtn.addEventListener('click', e => { e.stopPropagation(); closeCell(true); });
   textarea.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeCell(false);
-    if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); closeCell(true); }
+    if (e.key === 'Escape') {
+      textarea.value = fc.text || '';
+      cell.classList.remove('active');
+      activeCell = null;
+    }
+    if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveCell(); }
   });
+  cell._saveCell = saveCell;
 
   // Pin button
   pinBtn.addEventListener('click', async e => {
@@ -535,8 +542,13 @@ async function addGlobalTopic() {
 
 function closeActiveCell() {
   if (activeCell && activeCell.el) {
-    activeCell.el.classList.remove('active');
-    activeCell = null;
+    // save on blur (click outside)
+    if (typeof activeCell.el._saveCell === 'function') {
+      activeCell.el._saveCell();
+    } else {
+      activeCell.el.classList.remove('active');
+      activeCell = null;
+    }
   }
 }
 
@@ -589,6 +601,12 @@ document.getElementById('add-column-btn').addEventListener('click', addGlobalTop
 
 function escHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderMd(text) {
+  if (!text) return '';
+  // marked is loaded from CDN
+  return marked.parse(text, { breaks: true, gfm: true });
 }
 
 // ─── Init ────────────────────────────────────────────────────────────────────

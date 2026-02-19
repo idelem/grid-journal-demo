@@ -205,7 +205,7 @@ body {
   display: flex;
   align-items: stretch;
   border-bottom: 1px solid var(--border);
-  min-height: var(--row-h);
+  min-height: var(--cell-collapsed-h);
   transition: background var(--transition);
 }
 .day-row:hover { background: rgba(192,90,46,0.03); }
@@ -242,6 +242,10 @@ body {
   color: var(--ink-mid);
 }
 
+/* ─── Cell height token ─────────────────────────────────────────── */
+/* collapsed: 4 lines of ~18px + padding */
+:root { --cell-collapsed-h: 88px; }
+
 /* Topic cells in row */
 .topic-cell {
   width: var(--col-w);
@@ -249,12 +253,12 @@ body {
   flex-shrink: 0;
   border-right: 1px solid var(--border);
   background: var(--cell-bg);
-  cursor: pointer;
+  cursor: text;
   position: relative;
   transition: width var(--transition), min-width var(--transition), background var(--transition);
-  overflow: hidden;
   display: flex;
   align-items: flex-start;
+  min-height: var(--cell-collapsed-h);
 }
 .topic-cell.col-expanded {
   width: var(--col-expanded-w);
@@ -263,74 +267,96 @@ body {
 .topic-cell:hover { background: var(--cell-hover); }
 .topic-cell.active { background: var(--expanded-bg); border-right-color: var(--accent); }
 
-/* Cell preview text */
+/* ── Rendered markdown preview ── */
 .cell-preview {
-  padding: 8px 10px;
+  padding: 7px 10px;
   font-size: 12px;
-  color: var(--ink-mid);
+  color: var(--ink);
   width: 100%;
-  white-space: nowrap;
+  /* collapsed: single-line truncation per line, 4-line cap */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: var(--row-h);
-  padding-top: 0; padding-bottom: 0;
-  height: var(--row-h);
-  display: flex;
-  align-items: center;
+  line-height: 1.55;
+  max-height: calc(1.55em * 4 + 14px);
+  /* no wrap in collapsed state — overflow hides extra */
+  word-break: break-word;
 }
-.cell-preview.has-content { color: var(--ink); }
-.cell-preview.empty-hint { color: var(--ink-faint); font-style: italic; }
+/* when column is expanded, allow full wrapping and scrolling */
+.topic-cell.col-expanded .cell-preview {
+  -webkit-line-clamp: unset;
+  max-height: 220px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.cell-preview.empty-hint {
+  color: var(--ink-faint);
+  font-style: italic;
+  -webkit-line-clamp: unset;
+}
 
-/* Cell editor (expanded) */
+/* markdown rendered content styles */
+.cell-preview p  { margin: 0 0 4px; }
+.cell-preview p:last-child { margin-bottom: 0; }
+.cell-preview strong { font-weight: 600; color: var(--ink); }
+.cell-preview em { font-style: italic; }
+.cell-preview code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--bg2);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+.cell-preview ul, .cell-preview ol {
+  margin: 2px 0 4px 16px;
+  padding: 0;
+}
+.cell-preview li { margin: 1px 0; }
+.cell-preview h1,.cell-preview h2,.cell-preview h3 {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-weight: 600;
+  margin: 2px 0 4px;
+}
+.cell-preview a { color: var(--accent); text-decoration: none; }
+.cell-preview a:hover { text-decoration: underline; }
+.cell-preview blockquote {
+  border-left: 2px solid var(--accent-light);
+  margin: 2px 0 2px 4px;
+  padding-left: 8px;
+  color: var(--ink-mid);
+}
+
+/* ── Seamless textarea editor ── */
 .cell-editor-wrap {
   display: none;
-  flex-direction: column;
   width: 100%;
-  padding: 8px;
-  gap: 6px;
+  height: 100%;
 }
 .topic-cell.active .cell-editor-wrap { display: flex; }
-.topic-cell.active .cell-preview { display: none; }
+.topic-cell.active .cell-preview     { display: none; }
 
 .cell-textarea {
   width: 100%;
-  min-height: 80px;
-  resize: vertical;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: #fff;
+  min-height: var(--cell-collapsed-h);
+  resize: none;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   font-family: var(--font-mono);
   font-size: 12px;
+  line-height: 1.55;
   color: var(--ink);
-  padding: 6px 8px;
+  padding: 7px 10px;
   outline: none;
-  transition: border-color var(--transition);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-y: auto;
+  field-sizing: content; /* grows with content where supported */
 }
-.cell-textarea:focus { border-color: var(--accent); }
-
-.cell-actions {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-}
-.cell-btn {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 4px 10px;
-  border-radius: var(--radius);
-  cursor: pointer;
-  border: 1px solid var(--border);
-  background: var(--bg2);
-  color: var(--ink-mid);
-  transition: all var(--transition);
-}
-.cell-btn:hover { border-color: var(--border-dark); color: var(--ink); }
-.cell-btn.save-btn {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.cell-btn.save-btn:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+/* expanded column: taller textarea */
+.topic-cell.col-expanded .cell-textarea { min-height: 120px; }
 
 /* Free topic cells in a row */
 .free-cells-area {
@@ -398,17 +424,18 @@ body {
 .free-cell-actions .pin-btn { font-size: 11px; }
 
 .free-cell .cell-preview {
-  height: auto;
-  min-height: calc(var(--row-h) - 24px);
-  line-height: 1.4;
   padding: 6px 8px;
   font-size: 11px;
+  max-height: calc(1.55em * 4 + 12px);
 }
-.free-cell .cell-editor-wrap {
+.free-cell .cell-editor-wrap { padding: 0; }
+.free-cell.active .cell-preview      { display: none; }
+.free-cell.active .cell-editor-wrap  { display: flex; }
+.free-cell .cell-textarea {
+  min-height: 72px;
+  font-size: 11px;
   padding: 6px 8px;
 }
-.free-cell.active .cell-preview { display: none; }
-.free-cell.active .cell-editor-wrap { display: flex; }
 
 /* Add-free-cell button */
 .add-free-cell-btn {
