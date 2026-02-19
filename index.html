@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grid Journal</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Top bar -->
+  <header id="topbar">
+    <div id="topbar-left">
+      <h1 id="journal-title">Grid Journal</h1>
+      <nav id="month-nav">
+        <button id="prev-month" aria-label="Previous month">&#8592;</button>
+        <span id="month-label"></span>
+        <button id="next-month" aria-label="Next month">&#8594;</button>
+      </nav>
+    </div>
+    <div id="topbar-right">
+      <button id="add-column-btn" title="Add a global topic column">+ Add Topic</button>
+    </div>
+  </header>
+
+  <!-- Main grid area -->
+  <div id="grid-container">
+
+    <!-- Sticky column headers row -->
+    <div id="column-headers">
+      <div id="date-header-cell" class="header-cell date-col">Date</div>
+      <!-- Topic header cells injected here -->
+      <div id="header-spacer"></div>
+    </div>
+
+    <!-- Day rows -->
+    <div id="rows-container">
+      <!-- Rows injected here -->
+    </div>
+
+  </div>
+
+</div>
+
+<!-- Modal: rename topic -->
+<div id="rename-modal" class="modal hidden">
+  <div class="modal-box">
+    <h2>Name this topic</h2>
+    <input type="text" id="rename-input" placeholder="Topic name…" maxlength="40" autocomplete="off" />
+    <p id="rename-error" class="error-msg hidden">A topic with that name already exists. Choose a different name.</p>
+    <div class="modal-actions">
+      <button id="rename-cancel">Cancel</button>
+      <button id="rename-save" class="primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Overlay for modal -->
+<div id="overlay" class="hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
