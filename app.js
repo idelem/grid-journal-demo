@@ -21,6 +21,8 @@ let data = { pinnedTopics: [], entries: {} };
 // UI state
 let expandedColumns = new Set(); // topic ids whose columns are "expanded"
 let activeCell = null;           // { type:'pinned'|'free', dateKey, topicId|freeCellId, el }
+let archivePanelOpen = false;
+let searchIncludesArchived = true;
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
@@ -136,15 +138,12 @@ function closeModal(result) {
 
 function buildHeaders() {
   const container = document.getElementById('column-headers');
-  // Remove old topic headers (keep date-header-cell and header-spacer)
   container.querySelectorAll('.topic-header').forEach(el => el.remove());
-
   const spacer = document.getElementById('header-spacer');
-
-  data.pinnedTopics.forEach(topic => {
-    const el = makeTopicHeader(topic);
-    container.insertBefore(el, spacer);
+  data.pinnedTopics.filter(t => !t.archived).forEach(topic => {
+    container.insertBefore(makeTopicHeader(topic), spacer);
   });
+  updateArchiveBtn();
 }
 
 function makeTopicHeader(topic) {
@@ -156,9 +155,20 @@ function makeTopicHeader(topic) {
   el.innerHTML = `
     <span class="header-label">${escHtml(topic.name)}</span>
     <span class="expand-indicator">${expandedColumns.has(topic.id) ? '▴' : '▾'}</span>
+    <button class="archive-btn" title="Archive column">🙈</button>
     <button class="unpin-btn" title="Unpin column (convert to free cells)">📌</button>
     <button class="del-col-btn" title="Delete column and all its data">✕</button>
   `;
+
+  el.querySelector('.archive-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    topic.archived = true;
+    expandedColumns.delete(topic.id);
+    saveData();
+    render();
+    // re-render panel if open
+    if (archivePanelOpen) renderArchivePanel();
+  });
 
   el.querySelector('.del-col-btn').addEventListener('click', async e => {
     e.stopPropagation();
@@ -191,7 +201,7 @@ function makeTopicHeader(topic) {
   });
 
   el.addEventListener('click', e => {
-    if (e.target.classList.contains('del-col-btn') || e.target.classList.contains('unpin-btn')) return;
+    if (['del-col-btn','unpin-btn','archive-btn'].some(c => e.target.classList.contains(c))) return;
     if (expandedColumns.has(topic.id)) {
       expandedColumns.delete(topic.id);
     } else {
@@ -251,8 +261,8 @@ function makeRow(day) {
   `;
   row.appendChild(dateCell);
 
-  // Pinned topic cells
-  data.pinnedTopics.forEach(topic => {
+  // Pinned topic cells (skip archived)
+  data.pinnedTopics.filter(t => !t.archived).forEach(topic => {
     row.appendChild(makePinnedCell(dk, topic, entry.pinned[topic.id] || ''));
   });
 
@@ -552,12 +562,66 @@ function closeActiveCell() {
   }
 }
 
+// ─── Archive panel ───────────────────────────────────────────────────────────
+
+function updateArchiveBtn() {
+  const btn = document.getElementById('archive-panel-btn');
+  if (!btn) return;
+  const count = data.pinnedTopics.filter(t => t.archived).length;
+  btn.dataset.count = count > 0 ? count : '';
+  btn.title = count > 0 ? `Archived columns (${count})` : 'Archive (empty)';
+}
+
+function openArchivePanel() {
+  archivePanelOpen = true;
+  document.getElementById('archive-panel').classList.add('open');
+  document.getElementById('archive-panel-btn').classList.add('active');
+  renderArchivePanel();
+}
+
+function closeArchivePanel() {
+  archivePanelOpen = false;
+  document.getElementById('archive-panel').classList.remove('open');
+  document.getElementById('archive-panel-btn').classList.remove('active');
+}
+
+function renderArchivePanel() {
+  const list = document.getElementById('archive-list');
+  list.innerHTML = '';
+  const archived = data.pinnedTopics.filter(t => t.archived);
+  if (archived.length === 0) {
+    list.innerHTML = '<p class="archive-empty">No archived columns.</p>';
+    return;
+  }
+  archived.forEach(topic => {
+    const item = document.createElement('div');
+    item.className = 'archive-item';
+    const name = document.createElement('span');
+    name.className = 'archive-item-name';
+    name.textContent = topic.name;
+    const unarchiveBtn = document.createElement('button');
+    unarchiveBtn.className = 'archive-item-btn';
+    unarchiveBtn.title = 'Unarchive — restore to grid';
+    unarchiveBtn.textContent = '🔁';
+    unarchiveBtn.addEventListener('click', () => {
+      delete topic.archived;
+      saveData();
+      render();
+      renderArchivePanel();
+    });
+    item.appendChild(name);
+    item.appendChild(unarchiveBtn);
+    list.appendChild(item);
+  });
+}
+
 // ─── Render ───────────────────────────────────────────────────────────────────
 
 function render() {
   buildHeaders();
   buildRows();
   updateMonthLabel();
+  updateSearchArchivedToggle();
   reapplyQuery();
 }
 
@@ -598,6 +662,13 @@ document.addEventListener('keydown', e => {
 
 document.getElementById('add-column-btn').addEventListener('click', addGlobalTopic);
 
+// ─── Archive panel button ─────────────────────────────────────────────────────
+
+document.getElementById('archive-panel-btn').addEventListener('click', () => {
+  archivePanelOpen ? closeArchivePanel() : openArchivePanel();
+});
+document.getElementById('archive-panel-close').addEventListener('click', closeArchivePanel);
+
 // ─── Query parser ─────────────────────────────────────────────────────────────
 //
 // Syntax:  (#col with spaces) #colword keyword|alt keyword
@@ -636,56 +707,105 @@ function parseQuery(raw) {
 
 // ─── Query filter ─────────────────────────────────────────────────────────────
 
+function updateSearchArchivedToggle() {
+  const wrap = document.getElementById('search-wrap');
+  const hasArchived = data.pinnedTopics.some(t => t.archived);
+  wrap.classList.toggle('has-archived', hasArchived);
+  if (!hasArchived && searchIncludesArchived) {
+    // no archived columns left, reset toggle
+    searchIncludesArchived = false;
+    document.getElementById('search-archived-toggle').classList.remove('active');
+  }
+}
+
 function applyQuery(raw) {
   const searchWrap = document.getElementById('search-wrap');
   const hasQuery = raw.trim().length > 0;
   searchWrap.classList.toggle('has-query', hasQuery);
   document.body.classList.toggle('query-active', hasQuery);
 
-  if (!hasQuery) {
-    // Reset everything
-    document.querySelectorAll('.col-hidden, .row-hidden').forEach(el => {
-      el.classList.remove('col-hidden', 'row-hidden');
-    });
-    return;
-  }
+  // Always clean up ghost elements first
+  document.querySelectorAll('.topic-header.archived-ghost, .topic-cell.archived-ghost').forEach(el => el.remove());
 
-  const { colTerms, rowTerms } = parseQuery(raw);
+  // Reset col/row visibility
+  document.querySelectorAll('.col-hidden, .row-hidden').forEach(el => {
+    el.classList.remove('col-hidden', 'row-hidden');
+  });
+
+  if (!hasQuery) return;
+
+  const { colTerms, rowTerms } = hasQuery ? parseQuery(raw) : { colTerms: [], rowTerms: [] };
   const hasColFilter = colTerms.length > 0;
 
-  // ── Column visibility ──
-  // Pinned topic headers + cells
-  document.querySelectorAll('.topic-header').forEach(hdr => {
-    const name = (hdr.querySelector('.header-label')?.textContent || '').toLowerCase();
-    const visible = !hasColFilter || colTerms.some(t => name.includes(t));
-    hdr.classList.toggle('col-hidden', !visible);
-    const id = hdr.dataset.topicId;
-    document.querySelectorAll(`.topic-cell[data-topic-id="${id}"]`).forEach(cell => {
-      cell.classList.toggle('col-hidden', !visible);
+  // ── Active column visibility (only when there are col terms) ──
+  if (hasColFilter) {
+    document.querySelectorAll('.topic-header').forEach(hdr => {
+      const name = (hdr.querySelector('.header-label')?.textContent || '').toLowerCase();
+      const visible = colTerms.some(t => name.includes(t));
+      hdr.classList.toggle('col-hidden', !visible);
+      const id = hdr.dataset.topicId;
+      document.querySelectorAll(`.topic-cell[data-topic-id="${id}"]`).forEach(cell => {
+        cell.classList.toggle('col-hidden', !visible);
+      });
     });
-  });
 
-  // Free cells — per cell per row
-  document.querySelectorAll('.free-cell').forEach(cell => {
-    const name = (cell.querySelector('.free-cell-name')?.textContent || '').toLowerCase();
-    const visible = !hasColFilter || colTerms.some(t => name.includes(t));
-    cell.classList.toggle('col-hidden', !visible);
-  });
-
-  // ── Row visibility ──
-  if (rowTerms.length === 0) {
-    document.querySelectorAll('.day-row').forEach(row => row.classList.remove('row-hidden'));
-    return;
+    document.querySelectorAll('.free-cell').forEach(cell => {
+      const name = (cell.querySelector('.free-cell-name')?.textContent || '').toLowerCase();
+      cell.classList.toggle('col-hidden', !colTerms.some(t => name.includes(t)));
+    });
   }
 
+  // ── Ghost archived columns (when toggle on) ──
+  if (searchIncludesArchived && hasQuery) {
+    const archived = data.pinnedTopics.filter(t => t.archived);
+    // With col filter: only matching archived cols; without: all archived cols
+    const toShow = hasColFilter
+      ? archived.filter(topic => colTerms.some(t => topic.name.toLowerCase().includes(t)))
+      : archived;
+
+    if (toShow.length > 0) {
+      const spacer = document.getElementById('header-spacer');
+      const headerContainer = document.getElementById('column-headers');
+
+      toShow.forEach(topic => {
+        // Ghost header
+        const ghostHdr = document.createElement('div');
+        ghostHdr.className = 'header-cell topic-header archived-ghost';
+        ghostHdr.dataset.topicId = topic.id;
+        ghostHdr.innerHTML = `<span class="header-label">${escHtml(topic.name)}</span>`;
+        headerContainer.insertBefore(ghostHdr, spacer);
+
+        // Ghost cells in each row
+        document.querySelectorAll('.day-row').forEach(row => {
+          const dk = row.dataset.dateKey;
+          const entry = data.entries[dk] || { pinned: {}, free: [] };
+          const freeArea = row.querySelector('.free-cells-area');
+          const text = (entry.pinned && entry.pinned[topic.id]) || '';
+          const ghostCell = document.createElement('div');
+          ghostCell.className = 'topic-cell archived-ghost';
+          ghostCell.dataset.topicId = topic.id;
+          const preview = document.createElement('div');
+          preview.className = text ? 'cell-preview' : 'cell-preview empty-hint';
+          if (text) preview.innerHTML = renderMd(text);
+          else preview.textContent = '…';
+          ghostCell.appendChild(preview);
+          row.insertBefore(ghostCell, freeArea);
+        });
+      });
+    }
+  }
+
+  // ── Row visibility (row terms filter) ──
+  if (rowTerms.length === 0) return;
+
   document.querySelectorAll('.day-row').forEach(row => {
-    // Collect text from all visible cells in this row
-    const visibleCells = [
+    // Include ghost cells in row text matching
+    const cells = [
       ...row.querySelectorAll('.topic-cell:not(.col-hidden) .cell-preview'),
       ...row.querySelectorAll('.free-cell:not(.col-hidden) .cell-preview'),
+      ...row.querySelectorAll('.topic-cell.archived-ghost .cell-preview'),
     ];
-    const texts = visibleCells.map(el => el.textContent.toLowerCase());
-    const allText = texts.join(' ');
+    const allText = cells.map(el => el.textContent.toLowerCase()).join(' ');
     const matches = rowTerms.some(term => allText.includes(term));
     row.classList.toggle('row-hidden', !matches);
   });
@@ -702,6 +822,12 @@ document.getElementById('search-clear').addEventListener('click', () => {
   input.value = '';
   applyQuery('');
   input.focus();
+});
+
+document.getElementById('search-archived-toggle').addEventListener('click', () => {
+  searchIncludesArchived = !searchIncludesArchived;
+  document.getElementById('search-archived-toggle').classList.toggle('active', searchIncludesArchived);
+  applyQuery(document.getElementById('search-input').value);
 });
 
 // Re-apply current query after render (month nav, etc.)
@@ -730,6 +856,7 @@ function init() {
   currentYear = now.getFullYear();
   currentMonth = now.getMonth();
   render();
+  document.getElementById('search-archived-toggle').classList.toggle('active', searchIncludesArchived);
 
   // Scroll to today
   requestAnimationFrame(() => {

@@ -26,6 +26,7 @@
       <div id="search-wrap">
         <span id="search-icon">⌕</span>
         <input id="search-input" type="text" placeholder="#column  keyword|alt" autocomplete="off" spellcheck="false" />
+        <button id="search-archived-toggle" title="Include archived columns in search">🙈</button>
         <button id="search-clear" title="Clear search" aria-label="Clear">✕</button>
       </div>
     </div>
@@ -40,6 +41,7 @@
       <!-- Topic header cells injected here -->
       <div id="header-spacer">
         <button id="add-column-btn" title="Add a global topic column">+</button>
+        <button id="archive-panel-btn" title="Archive">🙈</button>
       </div>
     </div>
 
@@ -51,6 +53,15 @@
   </div>
 
 </div>
+
+<!-- Archive side panel -->
+<aside id="archive-panel">
+  <div id="archive-panel-header">
+    <span id="archive-panel-title">🙈 Archived</span>
+    <button id="archive-panel-close" title="Close">✕</button>
+  </div>
+  <div id="archive-list"></div>
+</aside>
 
 <!-- Modal: rename topic -->
 <div id="rename-modal" class="modal hidden">
